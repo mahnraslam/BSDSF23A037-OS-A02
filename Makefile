@@ -1,7 +1,11 @@
-# Compiler and flags
+ # Compiler and flags
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c99 -pedantic
 DEBUG_FLAGS = -g
+
+# >>> change: added LONG_LISTING build flag (optional)
+# Uncomment this if you always want LONG_LISTING enabled:
+# CFLAGS += -DLONG_LISTING
 
 # Directories
 SRC_DIR = src
@@ -32,7 +36,7 @@ $(BIN_DIR):
 
 # Link object files to create executable
 $(EXECUTABLE): $(OBJ) | $(BIN_DIR)
-	$(CC) $(OBJ) -o $@
+	$(CC) $(OBJ) -o $@ 
 	@echo "Build successful! Executable: $(EXECUTABLE)"
 
 # Compile source files to object files
@@ -43,6 +47,11 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
 debug: CFLAGS += $(DEBUG_FLAGS)
 debug: $(EXECUTABLE)
 	@echo "Debug build successful! Use: gdb $(EXECUTABLE)"
+
+# >>> change: Added optional long build target
+long: CFLAGS += -DLONG_LISTING   # >>> change
+long: $(EXECUTABLE)              # >>> change
+	@echo "Built with LONG_LISTING enabled"   # >>> change
 
 # Run the program (for testing)
 run: $(EXECUTABLE)
@@ -69,4 +78,4 @@ tree:
 	@tree -I '.git|*.swp|*.o' || find . -type d | sed -e "s/[^-][^\/]*\// |/g" -e "s/|\([^ ]\)/|-\1/"
 
 # Phony targets (not actual files)
-.PHONY: all clean run install uninstall debug tree
+.PHONY: all clean run install uninstall debug tree long   # >>> change
