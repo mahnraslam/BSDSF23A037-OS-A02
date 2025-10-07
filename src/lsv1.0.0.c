@@ -10,6 +10,9 @@
 #define _GNU_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
+
+#include <sys/ioctl.h>
+#include <termios.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <dirent.h>
@@ -159,31 +162,99 @@ void do_ls_l(const char *dir)
 
     closedir(dp);
 }
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <dirent.h>
+#include <sys/ioctl.h>
+#include <termios.h>
+#include <unistd.h>
 
-void do_ls(const char *dir)
-{
+/* --------------------------------------------------------------------
+ * do_ls(): Prints directory contents in columns (down-then-across)
+ * -------------------------------------------------------------------- */
+// Comparator for qsort
+int cmpstr(const void *a, const void *b) {
+    const char *sa = *(const char **)a;
+    const char *sb = *(const char **)b;
+    return strcmp(sa, sb);
+}
+
+void do_ls(const char *dir) {
     struct dirent *entry;
-    DIR *dp = opendir(dir); 
-    if (dp == NULL)
-    {
-        fprintf(stderr, "Cannot open directory : %s\n", dir);
+    DIR *dp = opendir(dir);
+    if (!dp) {
+        fprintf(stderr, "Cannot open directory: %s\n", dir);
         return;
     }
-    errno = 0;
-    while ((entry = readdir(dp)) != NULL)
-    {
-        if (entry->d_name[0] == '.')
-            continue;
-        
-        char path[1024];
-        snprintf(path, sizeof(path), "%s/%s", dir, entry->d_name);
-        printf("%s\n", entry->d_name);
-    }
 
-    if (errno != 0)
-    {
-        perror("readdir failed");
-    }
+    // --- Step 1: Gather filenames ---
+    size_t count = 0, capacity = 64;
+    char **filenames = malloc(capacity * sizeof(char *));
+    if (!filenames) { perror("malloc"); closedir(dp); return; }
 
+    size_t max_len = 0;
+    while ((entry = readdir(dp)) != NULL) {
+        if (entry->d_name[0] == '.') continue; // skip hidden
+
+        if (count >= capacity) {
+            capacity *= 2;
+            char **tmp = realloc(filenames, capacity * sizeof(char *));
+            if (!tmp) {
+                perror("realloc");
+                for (size_t i = 0; i < count; i++) free(filenames[i]);
+                free(filenames);
+                closedir(dp);
+                return;
+            }
+            filenames = tmp;
+        }
+
+        filenames[count] = strdup(entry->d_name);
+        if (!filenames[count]) {
+            perror("strdup");
+            for (size_t i = 0; i < count; i++) free(filenames[i]);
+            free(filenames);
+            closedir(dp);
+            return;
+        }
+
+        size_t len = strlen(entry->d_name);
+        if (len > max_len) max_len = len;
+        count++;
+    }
     closedir(dp);
+
+    if (count == 0) { free(filenames); return; }
+
+    // --- Step 2: Sort filenames ---
+    qsort(filenames, count, sizeof(char *), cmpstr);
+
+    // --- Step 3: Get terminal width ---
+    struct winsize w;
+    int term_width = 80;
+    if (isatty(STDOUT_FILENO) && ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0)
+        term_width = w.ws_col;
+
+    // --- Step 4: Calculate layout ---
+    int spacing = 2;
+    int col_width = max_len + spacing;
+    int num_cols = term_width / col_width;
+    if (num_cols < 1) num_cols = 1;
+    int num_rows = (count + num_cols - 1) / num_cols;
+
+    // --- Step 5: Print down-then-across ---
+    for (int row = 0; row < num_rows; row++) {
+        for (int col = 0; col < num_cols; col++) {
+            int index = row + col * num_rows;
+            if (index >= (int)count) break;
+            printf("%-*s", col_width, filenames[index]);
+        }
+        printf("\n");
+    }
+
+    // --- Step 6: Cleanup ---
+    for (size_t i = 0; i < count; i++) free(filenames[i]);
+    free(filenames);
 }
