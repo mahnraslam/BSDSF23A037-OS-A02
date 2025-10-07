@@ -163,3 +163,27 @@ file4   file8
 - After parsing, the program loops over directories and calls the correct display function based on the flag.  
 
 - This strategy allows **easy extension** for other modes (e.g., horizontal `-x`) by adding flags and corresponding function calls.
+- 
+# Recursive Function Concepts in `ls`
+
+## 1. What is a "base case" in recursion?
+
+- A **base case** is a condition in a recursive function that stops further recursive calls.  
+- Without a base case, recursion would continue indefinitely, eventually causing a **stack overflow** error.
+- In the context of a **recursive `ls`**, the base case occurs when:
+  - The function encounters a directory that has **no subdirectories** to explore, or
+  - It reaches a **non-directory file**, meaning there is nothing further to list recursively.
+
+In such cases, the function stops calling itself and returns to the previous level of recursion.
+
+---
+
+## 2. Why is it essential to construct a full path before making a recursive call?
+
+- When listing directories recursively, you must build the **complete path** (e.g., `"parent_dir/subdir"`) before calling the recursive function.
+- This ensures the recursive `do_ls()` function can **open and read the correct directory** on the filesystem.
+
+### Example:
+If you are currently inside `"parent_dir"` and find a subdirectory `"subdir"`, you must pass:
+```c
+do_ls("parent_dir/subdir");
