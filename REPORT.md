@@ -163,3 +163,65 @@ file4   file8
 - After parsing, the program loops over directories and calls the correct display function based on the flag.  
 
 - This strategy allows **easy extension** for other modes (e.g., horizontal `-x`) by adding flags and corresponding function calls.
+
+  #Feature 6
+   
+## 1. How do ANSI escape codes work to produce color in a standard Linux terminal? Show the specific code sequence for printing text in green.
+
+- **Explanation:**
+  - ANSI escape codes are special sequences that control text formatting, color, and cursor movement in the terminal.
+  - They start with the escape character `\033` (or `\x1B`), followed by `[` and then numeric parameters ending with `m`.
+  - General syntax:
+    ```
+    \033[<attribute>;<foreground>;<background>m
+    ```
+  - Example attributes:
+    - `0` → Reset all styles  
+    - `1` → Bold text
+  - Foreground color codes:
+    - 30 → Black
+    - 31 → Red
+    - 32 → Green
+    - 33 → Yellow
+    - 34 → Blue
+    - 35 → Magenta
+    - 36 → Cyan
+    - 37 → White
+
+- **Example Code (printing green text):**
+  printf("\033[0;32mThis text is green\033[0m\n");
+  # Executable File Permission Bits in `st_mode`
+
+To color an executable file, you need to check the **permission bits** stored in the `st_mode` field of the `struct stat` structure.  
+These bits indicate whether a file can be executed by the **owner**, **group**, or **others**.
+
+## Explanation
+
+The `st_mode` field contains both the file type and permission information.  
+Executable permissions are represented by the following constants defined in `<sys/stat.h>`:
+
+- **S_IXUSR** → File is executable by the **owner**
+- **S_IXGRP** → File is executable by the **group**
+- **S_IXOTH** → File is executable by **others**
+
+If any of these bits are set, the file can be considered executable.
+
+## Example Code
+
+```c
+#include <sys/stat.h>
+#include <stdio.h>
+
+int main() {
+    struct stat st;
+    stat("filename", &st);
+
+    if (st.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) {
+        printf("This file is executable.\n");
+    } else {
+        printf("This file is not executable.\n");
+    }
+
+    return 0;
+}
+
