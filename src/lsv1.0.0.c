@@ -162,15 +162,7 @@ void do_ls_l(const char *dir)
 
     closedir(dp);
 }
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
-#include <dirent.h>
-#include <sys/ioctl.h>
-#include <termios.h>
-#include <unistd.h>
-
+ 
 /* --------------------------------------------------------------------
  * do_ls(): Prints directory contents in columns (down-then-across)
  * -------------------------------------------------------------------- */
