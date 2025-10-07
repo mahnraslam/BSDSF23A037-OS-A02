@@ -133,3 +133,33 @@ file4   file8
   - Default → `do_ls()` (columnar "down then across")
 
 > This approach ensures **flexible and accurate output**, similar to the real `ls` command.
+
+# Answers of task 5: Display Logic Questions
+
+### 1. Compare the implementation complexity of the "down then across" (vertical) printing logic versus the "across" (horizontal) printing logic. Which one requires more pre-calculation and why?
+
+- **Down-then-across (vertical)**:  
+  - Requires calculating **number of rows and columns** based on terminal width and longest filename.  
+  - Index for each printed element is `row + col * num_rows`.  
+  - **More pre-calculation is needed** because rows must be computed to organize files vertically before printing.
+
+- **Across (horizontal)**:  
+  - Prints sequentially and wraps lines based on terminal width.  
+  - Only needs terminal width to determine when to wrap; no row calculations required.  
+  - **Less pre-calculation** compared to vertical layout.
+
+**Conclusion:** Vertical ("down then across") printing is more complex because it requires extra calculations to map file indices correctly.
+
+---
+
+### 2. Describe the strategy you used in your code to manage the different display modes (-l, -x, and default). How did your program decide which function to call for printing?
+
+- The program uses a **flag variable** (`long_fmt`) to determine the mode:  
+  - `long_fmt = 1` → Long-listing (`-l`) → calls `do_ls_l()`.  
+  - `long_fmt = 0` → Column display (default) → calls `do_ls()`.
+
+- **Command-line parsing** is done using `getopt()`. The program checks options and sets the appropriate flags.
+
+- After parsing, the program loops over directories and calls the correct display function based on the flag.  
+
+- This strategy allows **easy extension** for other modes (e.g., horizontal `-x`) by adding flags and corresponding function calls.

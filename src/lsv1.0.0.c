@@ -132,98 +132,12 @@ void print_file_stat(const char *filename)
            type, str, fileStat.st_nlink, user, group,
            (long long)fileStat.st_size, timebuf, filename);
 }
-void do_ls_l(const char *dir)
-{
-
-
-    struct dirent *entry;
-    DIR *dp = opendir(dir);
-    if (dp == NULL)
-    {
-        fprintf(stderr, "Cannot open directory : %s\n", dir);
-        return;
-    }
-    errno = 0;
-    while ((entry = readdir(dp)) != NULL)
-    {
-        if (entry->d_name[0] == '.')
-            continue;
-        char full_path[1024];
-        snprintf(full_path, sizeof(full_path), "%s/%s", dir, entry->d_name);
-        print_file_stat(full_path);
-    }
-
-    if (errno != 0)
-    {
-        perror("readdir failed");
-    }
-
-    closedir(dp);
-}
  
 int cmpstr(const void *a, const void *b) {
     const char *sa = *(const char **)a;
     const char *sb = *(const char **)b;
     return strcmp(sa, sb);
 }
-
-void do_ls_x(const char *dirname) {
-    DIR *dir = opendir(dirname);
-    if (!dir) {
-        perror("opendir");
-        return;
-    }
-
-    // Step 1: Read filenames into array
-    struct dirent *entry;
-    char *filenames[1000]; // Max 1000 entries
-    int count = 0;
-
-    while ((entry = readdir(dir)) != NULL) {
-        if (entry->d_name[0] != '.') {
-            filenames[count++] = strdup(entry->d_name);
-        }
-    }
-    closedir(dir);
-
-    // ✅ Step 2: Sort filenames alphabetically
-    qsort(filenames, count, sizeof(char *), cmpstr);
-
-    // Step 3: Get terminal width
-    struct winsize w;
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-    int term_width = w.ws_col;
-
-    // Step 4: Find longest filename
-    int max_len = 0;
-    for (int i = 0; i < count; i++) {
-        int len = strlen(filenames[i]);
-        if (len > max_len) max_len = len;
-    }
-
-    // Step 5: Calculate column width
-    int col_width = max_len + 2;
-    int current_width = 0;
-
-    // Step 6: Print filenames horizontally
-    for (int i = 0; i < count; i++) {
-        if (current_width + col_width > term_width) {
-            printf("\n");
-            current_width = 0;
-        }
-        printf("%-*s", col_width, filenames[i]);
-        current_width += col_width;
-    }
-    printf("\n");
-
-    // Step 7: Free memory
-    for (int i = 0; i < count; i++) {
-        free(filenames[i]);
-    }
-}
-// Comparator for qsort
-
-
 void do_ls(const char *dir) {
     struct dirent *entry;
     DIR *dp = opendir(dir);
@@ -301,3 +215,129 @@ void do_ls(const char *dir) {
     for (size_t i = 0; i < count; i++) free(filenames[i]);
     free(filenames);
 }
+void do_ls_l(const char *dir) {
+    struct dirent *entry;
+    DIR *dp = opendir(dir);
+    if (dp == NULL) {
+        fprintf(stderr, "Cannot open directory : %s\n", dir);
+        return;
+    }
+
+    // --- STEP 1: GATHER FILENAMES INTO DYNAMIC ARRAY ---
+    size_t count = 0;        // Number of files found
+    size_t capacity = 64;    // Initial array size
+    char **filenames = malloc(capacity * sizeof(char *));  // Allocate array of string pointers
+    if (!filenames) {
+        perror("malloc");
+        closedir(dp);
+        return;
+    }
+
+    // Read all directory entries
+    while ((entry = readdir(dp)) != NULL) {
+        if (entry->d_name[0] == '.')  // Skip hidden files
+            continue;
+
+        // Resize array if full (dynamic array growth)
+        if (count >= capacity) {
+            capacity *= 2;
+            char **tmp = realloc(filenames, capacity * sizeof(char *));
+            if (!tmp) {
+                perror("realloc");
+                // Cleanup on error: free all allocated strings
+                for (size_t i = 0; i < count; i++) free(filenames[i]);
+                free(filenames);
+                closedir(dp);
+                return;
+            }
+            filenames = tmp;
+        }
+
+        // Duplicate filename string (we need our own copy)
+        filenames[count] = strdup(entry->d_name);
+        if (!filenames[count]) {
+            perror("strdup");
+            for (size_t i = 0; i < count; i++) free(filenames[i]);
+            free(filenames);
+            closedir(dp);
+            return;
+        }
+        count++;
+    }
+    closedir(dp);  // Close directory when done reading
+
+    if (count == 0) {
+        free(filenames);
+        return;
+    }
+
+    // --- STEP 2: SORT FILENAMES ALPHABETICALLY ---
+    qsort(filenames, count, sizeof(char *), cmpstr);
+
+    // --- STEP 3: PRINT FILES WITH DETAILED INFORMATION ---
+    for (size_t i = 0; i < count; i++) {
+        char full_path[1024];
+        // Create full path by combining directory and filename
+        snprintf(full_path, sizeof(full_path), "%s/%s", dir, filenames[i]);
+        print_file_stat(full_path);  // Print file information
+        
+        free(filenames[i]);  // Free the duplicated string
+    }
+
+    free(filenames);  // Free the array itself
+}
+void do_ls_x(const char *dirname) {
+    DIR *dir = opendir(dirname);
+    if (!dir) {
+        perror("opendir");
+        return;
+    }
+
+    // Step 1: Read filenames into array
+    struct dirent *entry;
+    char *filenames[1000]; // Max 1000 entries
+    int count = 0;
+
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_name[0] != '.') {
+            filenames[count++] = strdup(entry->d_name);
+        }
+    }
+    closedir(dir);
+
+    // ✅ Step 2: Sort filenames alphabetically
+    qsort(filenames, count, sizeof(char *), cmpstr);
+
+    // Step 3: Get terminal width
+    struct winsize w;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+    int term_width = w.ws_col;
+
+    // Step 4: Find longest filename
+    int max_len = 0;
+    for (int i = 0; i < count; i++) {
+        int len = strlen(filenames[i]);
+        if (len > max_len) max_len = len;
+    }
+
+    // Step 5: Calculate column width
+    int col_width = max_len + 2;
+    int current_width = 0;
+
+    // Step 6: Print filenames horizontally
+    for (int i = 0; i < count; i++) {
+        if (current_width + col_width > term_width) {
+            printf("\n");
+            current_width = 0;
+        }
+        printf("%-*s", col_width, filenames[i]);
+        current_width += col_width;
+    }
+    printf("\n");
+
+    // Step 7: Free memory
+    for (int i = 0; i < count; i++) {
+        free(filenames[i]);
+    }
+} 
+ 
