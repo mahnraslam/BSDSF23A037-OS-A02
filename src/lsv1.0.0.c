@@ -31,6 +31,61 @@ void do_ls_x(const char *dir) ;
 // Display mode flags
 enum DisplayMode { DEFAULT, LONG, HORIZONTAL };
 
+// ============================================================================
+// COLOR MACROS - ANSI escape codes for terminal colors
+// ============================================================================
+
+// Reset to default terminal color
+#define COLOR_RESET   "\033[0m"
+// Regular colors
+#define COLOR_BLUE    "\033[0;34m"   // Directories
+#define COLOR_GREEN   "\033[0;32m"   // Executable files  
+#define COLOR_RED     "\033[0;31m"   // Archive files
+#define COLOR_PINK    "\033[0;35m"   // Symbolic links
+#define COLOR_CYAN    "\033[0;36m"   // Special files
+
+// ============================================================================
+// COLOR DETERMINATION FUNCTION
+// ============================================================================
+
+// Function to determine and return the appropriate color code for a file
+const char* get_file_color(const char *filename, mode_t mode) {
+    // Check if it's a directory
+    if (S_ISDIR(mode)) {
+        return COLOR_BLUE;
+    }
+    
+    // Check if it's a symbolic link
+    if (S_ISLNK(mode)) {
+        return COLOR_PINK;
+    }
+    
+    // Check if it's a special file
+    if (S_ISCHR(mode) || S_ISBLK(mode) || S_ISSOCK(mode) || S_ISFIFO(mode)) {
+        return COLOR_CYAN;
+    }
+    
+    // Check if it's a regular file with execute permissions
+    if (S_ISREG(mode) && (mode & (S_IXUSR | S_IXGRP | S_IXOTH))) {
+        return COLOR_GREEN;
+    }
+    
+    // Check for archive files by extension
+    if (S_ISREG(mode)) {
+        const char *ext = strrchr(filename, '.');
+        if (ext != NULL) {
+            if (strcmp(ext, ".tar") == 0 || strcmp(ext, ".gz") == 0 || 
+                strcmp(ext, ".zip") == 0 || strcmp(ext, ".bz2") == 0 ||
+                strcmp(ext, ".xz") == 0 || strcmp(ext, ".tgz") == 0) {
+                return COLOR_RED;
+            }
+        }
+    }
+    
+    // Default: no color
+    return COLOR_RESET;
+}
+
 int main(int argc, char *argv[]) {
     int opt;
     int display_mode = DEFAULT; // Default display mode
@@ -83,6 +138,17 @@ void print_file_stat(const char *filename)
         return;
     }
 
+    // Extract just the filename from the full path for display
+    const char *display_name = strrchr(filename, '/');
+    if (display_name == NULL) {
+        display_name = filename;
+    } else {
+        display_name++;
+    }
+
+    // Get the appropriate color for this file type
+    const char *color_code = get_file_color(display_name, fileStat.st_mode);
+
     char str[10] = "---------";
     int mode = fileStat.st_mode;
     char type = '?';
@@ -128,9 +194,10 @@ void print_file_stat(const char *filename)
     else
         strftime(timebuf, sizeof(timebuf), "%b %d %H:%M", &lt);
 
-    printf("%c%s %ld %-8s %-8s %8lld %s %s\n",
+    // Modified to include color in filename output
+    printf("%c%s %ld %-8s %-8s %8lld %s %s%s%s\n",
            type, str, fileStat.st_nlink, user, group,
-           (long long)fileStat.st_size, timebuf, filename);
+           (long long)fileStat.st_size, timebuf, color_code, display_name, COLOR_RESET);
 }
  
 int cmpstr(const void *a, const void *b) {
@@ -138,6 +205,7 @@ int cmpstr(const void *a, const void *b) {
     const char *sb = *(const char **)b;
     return strcmp(sa, sb);
 }
+
 void do_ls(const char *dir) {
     struct dirent *entry;
     DIR *dp = opendir(dir);
@@ -206,7 +274,17 @@ void do_ls(const char *dir) {
         for (int col = 0; col < num_cols; col++) {
             int index = row + col * num_rows;
             if (index >= (int)count) break;
-            printf("%-*s", col_width, filenames[index]);
+            
+            // Get file info for color determination
+            char full_path[1024];
+            snprintf(full_path, sizeof(full_path), "%s/%s", dir, filenames[index]);
+            struct stat file_stat;
+            if (lstat(full_path, &file_stat) == 0) {
+                const char *color_code = get_file_color(filenames[index], file_stat.st_mode);
+                printf("%s%-*s%s", color_code, col_width, filenames[index], COLOR_RESET);
+            } else {
+                printf("%-*s", col_width, filenames[index]);
+            }
         }
         printf("\n");
     }
@@ -215,6 +293,7 @@ void do_ls(const char *dir) {
     for (size_t i = 0; i < count; i++) free(filenames[i]);
     free(filenames);
 }
+
 void do_ls_l(const char *dir) {
     struct dirent *entry;
     DIR *dp = opendir(dir);
@@ -279,13 +358,14 @@ void do_ls_l(const char *dir) {
         char full_path[1024];
         // Create full path by combining directory and filename
         snprintf(full_path, sizeof(full_path), "%s/%s", dir, filenames[i]);
-        print_file_stat(full_path);  // Print file information
+        print_file_stat(full_path);  // Print file information (now includes color)
         
         free(filenames[i]);  // Free the duplicated string
     }
 
     free(filenames);  // Free the array itself
 }
+
 void do_ls_x(const char *dirname) {
     DIR *dir = opendir(dirname);
     if (!dir) {
@@ -330,7 +410,18 @@ void do_ls_x(const char *dirname) {
             printf("\n");
             current_width = 0;
         }
-        printf("%-*s", col_width, filenames[i]);
+        
+        // Get file info for color determination
+        char full_path[1024];
+        snprintf(full_path, sizeof(full_path), "%s/%s", dirname, filenames[i]);
+        struct stat file_stat;
+        if (lstat(full_path, &file_stat) == 0) {
+            const char *color_code = get_file_color(filenames[i], file_stat.st_mode);
+            printf("%s%-*s%s", color_code, col_width, filenames[i], COLOR_RESET);
+        } else {
+            printf("%-*s", col_width, filenames[i]);
+        }
+        
         current_width += col_width;
     }
     printf("\n");
@@ -339,5 +430,4 @@ void do_ls_x(const char *dirname) {
     for (int i = 0; i < count; i++) {
         free(filenames[i]);
     }
-} 
- 
+}
