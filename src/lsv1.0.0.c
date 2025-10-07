@@ -27,55 +27,53 @@ extern int errno;
 void print_file_stat(const char *filename);  
 void do_ls(const char *dir);
 void do_ls_l(const char *dir) ;
-int main(int argc, char  *argv[])
-{	
-    int opt ; 
+void do_ls_x(const char *dir) ;
+// Display mode flags
+enum DisplayMode { DEFAULT, LONG, HORIZONTAL };
 
-    int long_fmt = 0 ; 
-    if (argc == 1)
-    {
-        if (long_fmt)
+int main(int argc, char *argv[]) {
+    int opt;
+    int display_mode = DEFAULT; // Default display mode
+
+    // Parse command-line options
+    while ((opt = getopt(argc, argv, "lx")) != -1) {
+        switch (opt) {
+            case 'l':
+                display_mode = LONG;
+                break;
+            case 'x':
+                display_mode = HORIZONTAL;
+                break;
+            default:
+                fprintf(stderr, "Unknown option: -%c\n", optopt);
+                exit(EXIT_FAILURE);
+        }
+    }
+
+    // If no directory is given, use current directory
+    if (optind == argc) {
+        if (display_mode == LONG)
             do_ls_l(".");
+        else if (display_mode == HORIZONTAL)
+            do_ls_x(".");
         else
             do_ls(".");
-    }
-    else
-    {	
-    
-        while((opt= getopt(argc, argv, "l")) != -1)
-	    {
-	    switch(opt){
-		case 'l' :
-			long_fmt = 1 ; 
-			break ;
-        default:
-            fprintf(stderr, "Unknown option: -%c\n", optopt);
-            exit(EXIT_FAILURE);
-		}
-        
-
-	    }
-        
-        if (optind == argc) { 
-            if (long_fmt)
-                do_ls_l(".");
-             
-        }
-        else {
-            for (int i = optind ; i < argc; i++)
-            {
-                printf("Directory listing of %s : \n ",  argv[i]);
-                if (long_fmt)
+    } else {
+        // Loop through each directory argument
+        for (int i = optind; i < argc; i++) {
+            printf("Directory listing of %s:\n", argv[i]);
+            if (display_mode == LONG)
                 do_ls_l(argv[i]);
-            else 
-                do_ls(argv[i]) ;
-            puts("");
-            }
+            else if (display_mode == HORIZONTAL)
+                do_ls_x(argv[i]);
+            else
+                do_ls(argv[i]);
+            puts(""); // Add spacing between listings
+        }
     }
-    }
+
     return 0;
 }
- 
 
 void print_file_stat(const char *filename)
 {
@@ -162,24 +160,69 @@ void do_ls_l(const char *dir)
 
     closedir(dp);
 }
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
-#include <dirent.h>
-#include <sys/ioctl.h>
-#include <termios.h>
-#include <unistd.h>
-
-/* --------------------------------------------------------------------
- * do_ls(): Prints directory contents in columns (down-then-across)
- * -------------------------------------------------------------------- */
-// Comparator for qsort
+ 
 int cmpstr(const void *a, const void *b) {
     const char *sa = *(const char **)a;
     const char *sb = *(const char **)b;
     return strcmp(sa, sb);
 }
+
+void do_ls_x(const char *dirname) {
+    DIR *dir = opendir(dirname);
+    if (!dir) {
+        perror("opendir");
+        return;
+    }
+
+    // Step 1: Read filenames into array
+    struct dirent *entry;
+    char *filenames[1000]; // Max 1000 entries
+    int count = 0;
+
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_name[0] != '.') {
+            filenames[count++] = strdup(entry->d_name);
+        }
+    }
+    closedir(dir);
+
+    // ✅ Step 2: Sort filenames alphabetically
+    qsort(filenames, count, sizeof(char *), cmpstr);
+
+    // Step 3: Get terminal width
+    struct winsize w;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+    int term_width = w.ws_col;
+
+    // Step 4: Find longest filename
+    int max_len = 0;
+    for (int i = 0; i < count; i++) {
+        int len = strlen(filenames[i]);
+        if (len > max_len) max_len = len;
+    }
+
+    // Step 5: Calculate column width
+    int col_width = max_len + 2;
+    int current_width = 0;
+
+    // Step 6: Print filenames horizontally
+    for (int i = 0; i < count; i++) {
+        if (current_width + col_width > term_width) {
+            printf("\n");
+            current_width = 0;
+        }
+        printf("%-*s", col_width, filenames[i]);
+        current_width += col_width;
+    }
+    printf("\n");
+
+    // Step 7: Free memory
+    for (int i = 0; i < count; i++) {
+        free(filenames[i]);
+    }
+}
+// Comparator for qsort
+
 
 void do_ls(const char *dir) {
     struct dirent *entry;
